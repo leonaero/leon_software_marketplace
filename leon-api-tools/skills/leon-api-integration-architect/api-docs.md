@@ -1,7 +1,7 @@
 # Leon API Documentation — Reference Extract
 
 > Source: https://bitbucket.org/leondevteam/api-documentation
-> Extracted for use by the `integration-guide-writer` skill.
+> Extracted for use by the `leon-api-integration-architect` skill.
 
 ---
 
@@ -235,6 +235,91 @@ Required scopes must be declared during OAuth authorization. Include only the sc
 | `LOGBOOK` | Logbook |
 
 Full scope list: https://bitbucket.org/leondevteam/api-documentation/raw/master/authentication/ScopeList.md
+
+---
+
+## Data Synchronization Strategy — Polling vs Webhooks
+
+> **Recommended approach for synchronization: polling with `*Changes` queries.**
+> Webhooks (GraphQL subscriptions) are supported but polling is more reliable for most integration use cases.
+
+### Option A — Polling with `*Changes` queries (PREFERRED)
+
+Leon exposes dedicated queries for fetching records that have changed since a given point in time. These are the recommended approach for keeping an external system in sync with Leon data.
+
+Example: [`flightsChanges`](http://api-schema-doc.s3-website-eu-west-1.amazonaws.com/flightschanges.doc.html) — returns flights that have been created, modified, or cancelled since a given timestamp.
+
+**Why prefer polling:**
+- Stateless — no webhook endpoint to maintain
+- Resilient to downtime — if your system is offline, you catch up on the next poll by using the last-processed timestamp
+- Predictable load — you control the polling interval
+- No JWT validation infrastructure required
+
+**Recommended polling interval:** 1–5 minutes for near-real-time sync; longer for batch use cases.
+
+**Pattern:**
+1. Store `lastSyncTimestamp` after each successful poll
+2. Call `*Changes` query with `since: lastSyncTimestamp`
+3. Process returned records
+4. Update `lastSyncTimestamp` to current time
+
+### Option B — GraphQL Subscriptions via Webhooks
+
+Leon supports event-driven notifications by registering a GraphQL subscription as a webhook. When a subscribed event occurs, Leon POSTs the subscription payload to your specified URL.
+
+**When webhooks may be appropriate:**
+- You need sub-minute latency and cannot tolerate polling delay
+- You are building a UI or notification system that must react instantly
+- The `*Changes` query does not cover the specific event you need
+
+**Webhook limits:**
+- Maximum **10 webhooks per refresh token** at any given time
+- Each webhook is tied to a specific refresh token (valid 30 days, extended on access token generation)
+
+**Registration:** use the `createSubscriptionWebhook` mutation (see [`WebhookMutationSection`](http://api-schema-doc.s3-website-eu-west-1.amazonaws.com/webhookmutationsection.doc.html)):
+
+```graphql
+mutation {
+  webhook {
+    createSubscriptionWebhook(
+      refreshToken: "<refreshToken>",
+      label: "MY_WEBHOOK",           # unique, min 5 characters
+      subscription: "subscription Sub($var: String!) { ... }",
+      variables: "{\"var\": \"value\"}",
+      webhookUrl: "<your-endpoint-url>"
+    ) {
+      ... on NonNullBooleanValue { result: value }
+      ... on CreateSubscriptionWebhookViolationList {
+        error: value { message path }
+      }
+    }
+  }
+}
+```
+
+**Deletion:**
+```graphql
+mutation {
+  webhook {
+    deleteSubscriptionWebhook(label: "MY_WEBHOOK")
+  }
+}
+```
+
+**Notification format:**
+- Leon sends a **POST** request to your `webhookUrl`
+- Body: JSON containing the subscription payload
+- Header: `Authorization: Bearer <JWT>` — **must be validated** before trusting the payload
+
+**JWT validation (mandatory for security):**
+- Algorithm: **RS512**
+- Public key: `https://{oprId}.leon.aero/.well-known/keys/leon-subscriptions-webhook-1.pub`
+- Required claims to verify:
+  - `iss` must equal `Leon Software`
+  - `aud` must equal the webhook URL you registered
+  - `exp` must not be in the past
+
+**Available subscriptions:** [`http://api-schema-doc.s3-website-eu-west-1.amazonaws.com/subscription.doc.html`](http://api-schema-doc.s3-website-eu-west-1.amazonaws.com/subscription.doc.html)
 
 ---
 

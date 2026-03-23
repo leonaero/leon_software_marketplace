@@ -12,7 +12,7 @@
     {
       "name": "leon-api-tools",
       "source": "./leon-api-tools",
-      "description": "Claude Code skills for writing validated GraphQL queries and generating integration guides for the Leon Aviation API"
+      "description": "Claude Code skills for writing validated GraphQL queries, designing integration architectures, and generating integration guides for the Leon Aviation API"
     }
   ]
 }

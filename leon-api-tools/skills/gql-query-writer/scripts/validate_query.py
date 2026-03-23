@@ -2,19 +2,19 @@
 """
 Leon API — GraphQL Query Validator
 
-Downloads the Leon GraphQL API schema and validates queries against it.
+Pobiera schemat Leon GraphQL API i waliduje zapytanie.
 
-Usage:
+Użycie:
   python validate_query.py --dump-schema
   python validate_query.py --query 'query { operator { name subdomain } }'
   python validate_query.py --file my_query.graphql
   echo 'query { operator { name } }' | python validate_query.py
 
-Requirements (auto-installed if missing):
+Wymagania (instalowane automatycznie):
   graphql-core, requests
 
-Environment variables:
-  LEON_SCHEMA_URL    — optional schema URL override
+Zmienne środowiskowe:
+  LEON_SCHEMA_URL    — opcjonalne nadpisanie URL schematu
 """
 
 from __future__ import annotations
@@ -28,15 +28,15 @@ from typing import NamedTuple
 
 
 # ---------------------------------------------------------------------------
-# Silent auto-install of missing packages (no user prompts)
+# Ciche auto-instalowanie brakujących paczek (bez pytania użytkownika)
 # ---------------------------------------------------------------------------
 
 def _ensure_package(import_name: str, pip_name: str) -> None:
-    """Installs a package silently if not present."""
+    """Instaluje pakiet cicho jeśli go nie ma. Nie pyta użytkownika."""
     import importlib.util
     if importlib.util.find_spec(import_name) is not None:
         return
-    print(f"  [setup] Installing '{pip_name}'...", file=sys.stderr)
+    print(f"  [setup] Instaluję '{pip_name}'...", file=sys.stderr)
     result = subprocess.run(
         [sys.executable, "-m", "pip", "install", pip_name, "-q", "--disable-pip-version-check"],
         check=False,
@@ -44,11 +44,11 @@ def _ensure_package(import_name: str, pip_name: str) -> None:
     )
     if result.returncode != 0:
         sys.exit(
-            f"Failed to install '{pip_name}'.\n"
-            f"    Install manually: pip install {pip_name}\n"
+            f"❌  Nie udało się zainstalować '{pip_name}'.\n"
+            f"    Zainstaluj ręcznie: pip install {pip_name}\n"
             f"    {result.stderr.decode().strip()}"
         )
-    print(f"  [setup] Installed '{pip_name}'.", file=sys.stderr)
+    print(f"  [setup] Zainstalowano '{pip_name}'.", file=sys.stderr)
 
 
 _ensure_package("requests", "requests")
@@ -61,7 +61,7 @@ from graphql.error import GraphQLError  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
-# Constants
+# Stałe
 # ---------------------------------------------------------------------------
 
 SCHEMA_URL: str = os.getenv(
@@ -69,7 +69,7 @@ SCHEMA_URL: str = os.getenv(
     "http://api-schema-doc.s3-website-eu-west-1.amazonaws.com/schema-beta.json",
 )
 CACHE_FILE: Path = Path(__file__).parent / ".schema_cache.json"
-# ANSI colors — only when stderr is a TTY (does not interfere with --dump-schema on stdout)
+# Kolory ANSI — tylko gdy stderr jest TTY (nie blokują --dump-schema na stdout)
 _USE_COLOR = sys.stderr.isatty()
 
 
@@ -85,12 +85,12 @@ def DIM(t: str) -> str:    return _c("2",  t)
 
 
 def _err(*args: object) -> None:
-    """Prints to stderr (never mixes with --dump-schema on stdout)."""
+    """Wypisuje na stderr (nigdy nie miesza się z --dump-schema na stdout)."""
     print(*args, file=sys.stderr)
 
 
 # ---------------------------------------------------------------------------
-# Schema fetching and parsing
+# Pobieranie i parsowanie schematu
 # ---------------------------------------------------------------------------
 
 class SchemaFetchError(RuntimeError):
@@ -103,37 +103,37 @@ def _fetch_raw(url: str) -> dict:
         resp.raise_for_status()
         return resp.json()
     except requests.RequestException as exc:
-        raise SchemaFetchError(f"Cannot fetch schema from {url}: {exc}") from exc
+        raise SchemaFetchError(f"Nie można pobrać schematu z {url}: {exc}") from exc
 
 
 def load_schema(*, force_refresh: bool = False) -> tuple[GraphQLSchema, dict]:
-    """Returns (parsed GQL schema, raw introspection dict)."""
+    """Zwraca (sparsowany schemat GQL, surowy introspection dict)."""
     if not force_refresh and CACHE_FILE.exists():
-        _err(DIM(f"  [schema] Using cache: {CACHE_FILE}"))
+        _err(DIM(f"  [schema] Używam cache: {CACHE_FILE}"))
         raw = json.loads(CACHE_FILE.read_text())
     else:
-        _err(DIM(f"  [schema] Fetching from {SCHEMA_URL} ..."))
+        _err(DIM(f"  [schema] Pobieram z {SCHEMA_URL} …"))
         raw = _fetch_raw(SCHEMA_URL)
         CACHE_FILE.write_text(json.dumps(raw))
-        _err(DIM(f"  [schema] Saved cache: {CACHE_FILE}"))
+        _err(DIM(f"  [schema] Zapisano cache: {CACHE_FILE}"))
 
     try:
         schema = build_client_schema(raw["data"])
         return schema, raw
     except (KeyError, Exception) as exc:
         if not force_refresh:
-            _err(YELLOW("  [schema] Cache corrupted, re-fetching..."))
+            _err(YELLOW("  [schema] Cache uszkodzony, pobieram ponownie…"))
             CACHE_FILE.unlink(missing_ok=True)
             return load_schema(force_refresh=True)
-        raise SchemaFetchError(f"Cannot build schema: {exc}") from exc
+        raise SchemaFetchError(f"Nie można zbudować schematu: {exc}") from exc
 
 
 # ---------------------------------------------------------------------------
-# Schema dump — --dump-schema mode
+# Dump schematu — tryb --dump-schema
 # ---------------------------------------------------------------------------
 
 def _type_ref_str(type_ref: dict) -> str:
-    """Recursively converts typeRef dict to string, e.g. 'String!', '[Flight!]!'."""
+    """Rekurencyjnie zamienia typeRef dict na string, np. 'String!', '[Flight!]!'."""
     kind = type_ref.get("kind", "")
     name = type_ref.get("name")
     of_type = type_ref.get("ofType")
@@ -145,12 +145,12 @@ def _type_ref_str(type_ref: dict) -> str:
 
 
 def lookup_types(schema_raw: dict, names: list[str]) -> None:
-    """Prints type/field definitions from the schema to stdout.
+    """Drukuje na stdout definicje konkretnych typów/pól z schematu.
 
-    Supports:
-    - type names (e.g. Flight, FlightFilter, CrewMemberOnLeg)
-    - root query/mutation field names (e.g. flightList, operator)
-    - case-insensitive partial matching when no exact match found
+    Obsługuje:
+    - nazwy typów (np. Flight, FlightFilter, CrewMemberOnLeg)
+    - nazwy root queries/mutations (np. flightList, operator)
+    - wyszukiwanie case-insensitive z częściowym dopasowaniem gdy brak dokładnego trafu
     """
     schema_def = schema_raw.get("data", {}).get("__schema", {})
     types: list[dict] = schema_def.get("types", [])
@@ -166,14 +166,14 @@ def lookup_types(schema_raw: dict, names: list[str]) -> None:
     output: list[str] = []
 
     for name in names:
-        # 1. Exact match on type name
+        # 1. Dokładne dopasowanie do nazwy typu
         if name in types_by_name:
             t = types_by_name[name]
             output.extend(_format_type(t))
             output.append("")
             continue
 
-        # 2. Exact match on root query/mutation field
+        # 2. Dokładne dopasowanie do root query/mutation field
         if name in root_fields:
             kind, f = root_fields[name]
             args_str = ""
@@ -186,7 +186,7 @@ def lookup_types(schema_raw: dict, names: list[str]) -> None:
             output.append("")
             continue
 
-        # 3. Case-insensitive partial matching
+        # 3. Case-insensitive częściowe dopasowanie
         name_lower = name.lower()
         matched_types = [n for n in types_by_name if name_lower in n.lower() and not n.startswith("__")]
         matched_fields = [n for n in root_fields if name_lower in n.lower()]
@@ -215,7 +215,7 @@ def lookup_types(schema_raw: dict, names: list[str]) -> None:
 
 
 def _format_type(t: dict) -> list[str]:
-    """Formats a single type to readable text."""
+    """Formatuje pojedynczy typ do czytelnej postaci tekstowej."""
     lines: list[str] = []
     desc = f"  # {t['description']}" if t.get("description") else ""
     lines.append(f"{t['kind']} {t['name']}{desc} {{")
@@ -236,7 +236,7 @@ def _format_type(t: dict) -> list[str]:
                 args_parts = [f"{a['name']}: {_type_ref_str(a['type'])}" for a in f["args"]]
                 args_str = f"({', '.join(args_parts)})"
             ret = _type_ref_str(f["type"])
-            deprecated = "  DEPRECATED" if f.get("isDeprecated") else ""
+            deprecated = "  ⚠️ DEPRECATED" if f.get("isDeprecated") else ""
             lines.append(f"  {f['name']}{args_str}: {ret}{deprecated}{fdesc}")
 
     lines.append("}")
@@ -244,7 +244,7 @@ def _format_type(t: dict) -> list[str]:
 
 
 def dump_schema(schema_raw: dict) -> None:
-    """Prints a condensed schema summary to stdout for analysis by Claude."""
+    """Drukuje na stdout skondensowane podsumowanie schematu do analizy przez Claude."""
     schema_def = schema_raw.get("data", {}).get("__schema", {})
     types: list[dict] = schema_def.get("types", [])
 
@@ -303,7 +303,7 @@ def dump_schema(schema_raw: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Validation
+# Walidacja
 # ---------------------------------------------------------------------------
 
 class ValidationResult(NamedTuple):
@@ -312,11 +312,11 @@ class ValidationResult(NamedTuple):
 
 
 def validate_query_str(schema: GraphQLSchema, query_string: str) -> ValidationResult:
-    """Parses and validates a GQL query."""
+    """Parsuje i waliduje zapytanie GQL."""
     try:
         document = parse(query_string)
     except GraphQLError as exc:
-        return ValidationResult(valid=False, errors=[f"Parse error: {exc.message}"])
+        return ValidationResult(valid=False, errors=[f"Błąd parsowania: {exc.message}"])
 
     errors = validate(schema, document)
     if errors:
@@ -325,38 +325,38 @@ def validate_query_str(schema: GraphQLSchema, query_string: str) -> ValidationRe
 
 
 # ---------------------------------------------------------------------------
-# Main validation logic
+# Główna logika walidacji
 # ---------------------------------------------------------------------------
 
 def _print_errors(errors: list[str], indent: int = 2) -> None:
     pad = " " * indent
     for err in errors:
-        _err(f"{pad}{RED('x')} {err}")
+        _err(f"{pad}{RED('✗')} {err}")
 
 
 def run(query_string: str, *, force_refresh: bool = False) -> bool:
-    """Validates a query. Returns True if query is valid."""
+    """Waliduje zapytanie. Zwraca True jeśli zapytanie jest poprawne."""
     _err()
-    _err(BOLD("--- Leon GQL Validator ---"))
+    _err(BOLD("━━━ Leon GQL Validator ━━━"))
     _err()
 
     try:
         schema, schema_raw = load_schema(force_refresh=force_refresh)
     except SchemaFetchError as exc:
-        _err(RED(f"  {exc}"))
+        _err(RED(f"❌  {exc}"))
         return False
 
     _err()
-    _err(BOLD("> Validating query..."))
+    _err(BOLD("▶ Walidacja zapytania…"))
     result = validate_query_str(schema, query_string)
 
     if result.valid:
-        _err(GREEN("  Query is valid."))
+        _err(GREEN("✅  Zapytanie jest poprawne."))
         _err()
         print(query_string)
         return True
 
-    _err(RED(f"  Found {len(result.errors)} error(s):"))
+    _err(RED(f"❌  Znaleziono {len(result.errors)} błąd(ów):"))
     _print_errors(result.errors)
     return False
 
@@ -369,9 +369,9 @@ def main() -> None:
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Validates a GraphQL query against the Leon API schema.",
+        description="Waliduje zapytanie GraphQL względem schematu Leon API.",
         epilog=(
-            "Examples:\n"
+            "Przykłady:\n"
             "  python validate_query.py --dump-schema\n"
             "  python validate_query.py --query 'query { operator { name subdomain } }'\n"
             "  python validate_query.py --file flights.graphql\n"
@@ -380,23 +380,23 @@ def main() -> None:
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--query",       "-q", metavar="GQL",  help="GraphQL query as a string")
-    parser.add_argument("--file",        "-f", metavar="PATH", help="Path to .graphql file")
+    parser.add_argument("--query",       "-q", metavar="GQL",  help="Zapytanie GraphQL jako string")
+    parser.add_argument("--file",        "-f", metavar="PATH", help="Ścieżka do pliku .graphql")
     parser.add_argument("--dump-schema", "-d", action="store_true",
-                        help="Print schema summary to stdout and exit")
+                        help="Wydrukuj podsumowanie schematu na stdout i zakończ")
     parser.add_argument("--lookup", "-l", metavar="TYPE", nargs="+",
-                        help="Print definitions of specific types/fields (e.g. --lookup Flight CrewMemberOnLeg)")
+                        help="Wydrukuj definicję konkretnych typów/pól (np. --lookup Flight CrewMemberOnLeg)")
     parser.add_argument("--no-fix",      action="store_true",
-                        help="(ignored, kept for backwards compatibility)")
+                        help="(ignorowany, pozostawiony dla kompatybilności wstecznej)")
     parser.add_argument("--refresh",     action="store_true",
-                        help="Force fresh schema fetch (bypass cache)")
+                        help="Wymuś pobranie świeżego schematu (ignoruj cache)")
 
     args = parser.parse_args()
 
     try:
         schema, schema_raw = load_schema(force_refresh=args.refresh)
     except SchemaFetchError as exc:
-        sys.exit(f"  {exc}")
+        sys.exit(f"❌  {exc}")
 
     if args.dump_schema:
         dump_schema(schema_raw)
@@ -406,20 +406,20 @@ def main() -> None:
         lookup_types(schema_raw, args.lookup)
         return
 
-    # Read query
+    # Odczyt zapytania
     if args.query:
         query_string = args.query
     elif args.file:
         path = Path(args.file)
         if not path.exists():
-            sys.exit(f"  File not found: {path}")
+            sys.exit(f"❌  Plik nie istnieje: {path}")
         query_string = path.read_text()
     elif not sys.stdin.isatty():
         query_string = sys.stdin.read()
     else:
         sys.exit(
-            "  No query provided. Use --query, --file, --dump-schema, or pipe via stdin.\n"
-            "    Example: python validate_query.py --query 'query { operator { name } }'"
+            "❌  Brak zapytania. Podaj --query, --file, --dump-schema lub przekaż przez stdin.\n"
+            "    Przykład: python validate_query.py --query 'query { operator { name } }'"
         )
 
     success = run(query_string, force_refresh=False)
