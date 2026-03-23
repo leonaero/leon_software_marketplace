@@ -1,0 +1,2 @@
+graphql-core>=3.2.0
+requests>=2.28.0
