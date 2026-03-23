@@ -1,0 +1,18 @@
+{
+  "name": "leon-software-marketplace",
+  "owner": {
+    "name": "Leon Software",
+    "email": "support@leonsoftware.com"
+  },
+  "metadata": {
+    "description": "Leon Software's Claude Code plugin marketplace",
+    "pluginRoot": "."
+  },
+  "plugins": [
+    {
+      "name": "leon-api-tools",
+      "source": "./leon-api-tools",
+      "description": "Claude Code skills for writing validated GraphQL queries and generating integration guides for the Leon Aviation API"
+    }
+  ]
+}

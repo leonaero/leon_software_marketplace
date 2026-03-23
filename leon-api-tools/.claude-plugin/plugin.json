@@ -1,0 +1,12 @@
+{
+  "name": "leon-api-tools",
+  "version": "0.1.0",
+  "description": "Claude Code skills for working with the Leon Aviation API — write validated GraphQL queries and generate integration guides",
+  "author": {
+    "name": "Leon Software",
+    "email": "support@leonsoftware.com"
+  },
+  "repository": "https://github.com/leonaero/leon_software_marketplace",
+  "license": "Apache-2.0",
+  "keywords": ["leon", "aviation", "graphql", "api"]
+}
