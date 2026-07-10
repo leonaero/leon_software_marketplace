@@ -1,0 +1,12 @@
+{
+  "name": "leon-mcp-skills",
+  "version": "0.3.0",
+  "description": "Claude Code skills for operating the Leon MCP server — search flights, manage the trip/flight lifecycle, and build custom reports through natural language",
+  "author": {
+    "name": "Leon Software",
+    "email": "support@leonsoftware.com"
+  },
+  "repository": "https://github.com/leonaero/leon_software_marketplace",
+  "license": "Apache-2.0",
+  "keywords": ["leon", "aviation", "mcp", "skills", "flights", "trips"]
+}

@@ -13,6 +13,11 @@
       "name": "leon-api-tools",
       "source": "./leon-api-tools",
       "description": "Claude Code skills for writing validated GraphQL queries, designing integration architectures, and generating integration guides for the Leon Aviation API"
+    },
+    {
+      "name": "leon-mcp-skills",
+      "source": "./leon-mcp-skills",
+      "description": "Claude Code skills for operating the Leon MCP server — search flights, manage the trip/flight lifecycle, and build custom reports through natural language"
     }
   ]
 }
